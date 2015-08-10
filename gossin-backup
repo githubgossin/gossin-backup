@@ -1,0 +1,190 @@
+#!/bin/bash
+
+###############################################################################
+#
+# gossin-backup by Erik Hjelmås, erikh@hig.no, April 6. 2012
+#
+# This script makes a full backup in $basedest the first time it is executed on 
+# a new day. Subsequent backups on the same day are level one incremental 
+# backups. It keeps all backups from the current day, the first backup made 
+# from each of the last $days, $months and $years.
+#
+# The key feature of this script is that all full backups are made using 
+# hardlinks to unchanged files (file-level deduplication), thereby being 
+# storage efficient.
+#
+# Credits to Mike Rubel, http://www.mikerubel.org/computers/rsync_snapshots/
+# (and everyone who have published similar articles based on Mike Rubels work)
+#
+###############################################################################
+
+
+#------------------------------------------------------------------------------
+# config options:
+#
+
+crudini_cmd=$(which crudini)
+if [[ ! (-x $crudini_cmd) ]]; then
+    echo "$crudini_cmd does not exist or is notexecutable, exiting..."
+    exit 1
+fi
+
+source=$($crudini_cmd --get gossin-backup.conf Linux source)
+basedest=$($crudini_cmd --get gossin-backup.conf Linux basedest)
+exclude=$($crudini_cmd --get gossin-backup.conf Linux exclude)
+days=$($crudini_cmd --get gossin-backup.conf Linux days)
+months=$($crudini_cmd --get gossin-backup.conf Linux months)
+years=$($crudini_cmd --get gossin-backup.conf Linux years)
+max_file_size=$($crudini_cmd --get gossin-backup.conf Linux max_file_size)
+
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# which programs to use (could automate this with $(which prog) but that is
+# slightly less secure):
+#
+rsync_cmd=/usr/bin/rsync
+find_cmd=/usr/bin/find
+stat_cmd=/usr/bin/stat
+date_cmd=/bin/date                      # linux
+#date_cmd=/usr/bin/date                 # windows
+sort_cmd=/usr/bin/sort
+egrep_cmd=/bin/egrep                    # linux
+#egrep_cmd=/usr/bin/egrep               # windows
+tail_cmd=/usr/bin/tail
+mv_cmd=/bin/mv                          # linux
+#mv_cmd=/usr/bin/mv                     # windows
+rm_cmd=/bin/rm                          # linux
+#rm_cmd=/usr/bin/rm                     # windows
+rmdir_cmd=/bin/rmdir                    # linux
+#rmdir_cmd=/usr/bin/rmdir               # windows
+#------------------------------------------------------------------------------
+
+
+################### DO NOT CHANGE ANYTHING BELOW THIS LINE ####################
+
+
+# check config options, and presence of programs
+#
+# TODO for config options
+#
+for prog in $rsync_cmd $find_cmd $stat_cmd $date_cmd $sort_cmd $egrep_cmd \
+            $tail_cmd $mv_cmd $rm_cmd $rmdir_cmd; do
+    if [[ ! (-x $prog) ]]; then
+        echo "$prog does not exist or is notexecutable, exiting..."
+        exit 1
+    fi
+done
+
+# find most recent backup (parsing ls is dangerous due to word 
+# splitting, and globbing is difficult for sorting by mtime so 
+# we use stat even though it makes it a bit platform dependent)
+#
+# stat's %Y add number of epochs since 1970 to the filename, we do
+# this to easily sort dirs according to date, then strip away the
+# epoch number with egrep, hmmm should be a more elegant way maybe...
+#
+prev=$($stat_cmd -c "%Y%n" $basedest/{d,m,y}*backup-* | $sort_cmd \
+       | $egrep_cmd -o '/.*$' | $tail_cmd -n 1)
+
+# set some date variables
+#
+date=$($date_cmd "+%d-%m-%Y--%H%M%S")
+day=$($date_cmd "+%d-%m-%Y")
+#
+# backups labelled month and year should be interpreted as covering
+# all data from the labelled month, thereby we use current-1 as label
+#
+this_month=$(printf "%02d\n" $(( 10#$($date_cmd "+%m") )) )
+prev_month=$(printf "%02d\n" $(( 10#$($date_cmd "+%m")-1)))
+this_year=$($date_cmd "+%Y")
+prev_year=$(($($date_cmd "+%Y")-1))
+
+# name of this backup 
+#
+current="$basedest/backup-$date"
+
+# make a backup based on hard links to most recent backup
+# -a archive mode = -rlptgoD: recursive copy, preserve everything
+# --max-size=$max_file_size   don't transfer any file > $max_file_size
+# --exclude-from=$exclude     read exclude patterns from $exclude
+# --link-dest=$prev           hardlink to files in $prev when unchanged
+# --compare-dest=$prev        compare received files relative to $prev
+#
+
+# full backup if new day, level one increment otherwise
+# differs in --link-dest vs --compare-dest
+#
+if [[ ! "$prev" =~ $day ]]                       # first run on new day
+then                                             # full backup
+   echo "doing full backup $current"
+   $rsync_cmd -a                          \
+              --max-size=$max_file_size   \
+              --exclude-from="$exclude"   \
+              --link-dest="$prev"         \
+              "$source"                   \
+              "$current"
+else                                             # incremental backup
+   echo "doing level one incremental backup $current"
+   $rsync_cmd -a                          \
+              --max-size=$max_file_size   \
+              --exclude-from="$exclude"   \
+              --compare-dest="$prev"      \
+              "$source"                   \
+              "$current"
+   # unfortunately rsync creates empty dirs which we have to remove manually:
+   $find_cmd "$current" -depth -type d -empty -exec rmdir {} \;
+fi
+
+#
+# The following if statement first checks if this is first day of new year,
+# if so move newly performed full backup to an annual backup, if not repeat
+# the same procedure checking if it is the first day of a month (except 
+# January of course since that is the first day of a new year), then finally
+# checking if it first run on a new day. In any of these cases history older
+# than what is indicated by the config options is deleted.
+#
+if [[ (! "$prev" =~ $this_year$) && \
+      (! -d "$basedest/year-backup-$prev_month-$prev_year") ]] 
+then                                       # first run on new year
+   $mv_cmd "$current" "$basedest/year-backup-$prev_month-$prev_year"
+                                           # old yearly backups to be deleted:
+   old_yearly=($($stat_cmd -c "%Y%n" "$basedest/year-backup-"* | $sort_cmd \
+                 | $egrep_cmd -o '/.*$'))
+   while [[ $years -lt ${#old_yearly[@]} ]]
+   do
+      $rm_cmd -rf "${old_yearly[0]}"
+      # re-read array, expensive but protects a bit against race conditions
+      old_yearly=($($stat_cmd -c "%Y%n" "$basedest/year-backup-"* | $sort_cmd \
+                    | $egrep_cmd -o '/.*$'))
+   done
+elif [[ (! "$prev" =~ $this_month-$this_year$) && \
+        (! -d "$basedest/month-backup-$prev_month-$this_year") ]]
+then                                       # first run on new month
+   $mv_cmd "$current" "$basedest/month-backup-$prev_month-$this_year"
+                                           # old monthly backups to be deleted:
+   old_monthly=($($stat_cmd -c "%Y%n" "$basedest/month-backup-"* | $sort_cmd \
+                  | $egrep_cmd -o '/.*$'))
+   while [[ $months -lt ${#old_monthly[@]} ]]
+   do
+      $rm_cmd -rf "${old_monthly[0]}"
+      # re-read array, expensive but protects a bit against race conditions
+      old_monthly=($($stat_cmd -c "%Y%n" "$basedest/month-backup-"* | $sort_cmd \
+                     | $egrep_cmd -o '/.*$'))
+   done
+elif [[ ! "$prev" =~ $day ]]               # first run on new day
+then 
+   $mv_cmd "$current" "$basedest/day-backup-$day"
+      $rm_cmd -rf "$basedest/backup-"*     # delete inc. backups from yesterday
+                                           # old daily backups to be deleted:
+   old_daily=($($stat_cmd -c "%Y%n" "$basedest/day-backup-"* | $sort_cmd \
+                | $egrep_cmd -o '/.*$'))   
+   while [[ $days -lt ${#old_daily[@]} ]]
+   do
+      $rm_cmd -rf "${old_daily[0]}"
+      # re-read array, expensive but protects a bit against race conditions
+      old_daily=($($stat_cmd -c "%Y%n" "$basedest/day-backup-"* | $sort_cmd \
+                   | $egrep_cmd -o '/.*$'))   
+   done
+fi
