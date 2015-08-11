@@ -25,17 +25,45 @@
 
 crudini_cmd=$(which crudini)
 if [[ ! (-x $crudini_cmd) ]]; then
-    echo "$crudini_cmd does not exist or is notexecutable, exiting..."
+    echo "$crudini_cmd does not exist or is not executable, exiting..."
     exit 1
 fi
 
-source=$($crudini_cmd --get gossin-backup.conf Linux source)
-basedest=$($crudini_cmd --get gossin-backup.conf Linux basedest)
-exclude=$($crudini_cmd --get gossin-backup.conf Linux exclude)
-days=$($crudini_cmd --get gossin-backup.conf Linux days)
-months=$($crudini_cmd --get gossin-backup.conf Linux months)
-years=$($crudini_cmd --get gossin-backup.conf Linux years)
-max_file_size=$($crudini_cmd --get gossin-backup.conf Linux max_file_size)
+conf_file="gossin-backup.conf"
+
+# make sure source has trailing slash (NOTE: fails if multiple slashes):
+tmpsource=$($crudini_cmd     --get "$conf_file" Linux source)
+source="${tmpsource%/}/"
+# make sure basedest do not have trailing slash:
+tmpbasedest=$($crudini_cmd   --get "$conf_file" Linux basedest)
+basedest="${tmpbasedest%/}"
+exclude=$($crudini_cmd       --get "$conf_file" Linux exclude)
+days=$($crudini_cmd          --get "$conf_file" Linux days)
+months=$($crudini_cmd        --get "$conf_file" Linux months)
+years=$($crudini_cmd         --get "$conf_file" Linux years)
+max_file_size=$($crudini_cmd --get "$conf_file" Linux max_file_size)
+
+# test for missing rsyncexludes file
+if [[ ! (-f $exclude) ]]; then
+    echo "$exclude does not exist or is not a file, exiting..."
+    exit 1
+fi
+
+# test for missing basedest
+if [[ ! (-d $basedest) ]]; then
+    echo "$basedest does not exist or is not a directory, exiting..."
+    exit 1
+fi
+
+# test if this is run in empty $basedest, if so, initiate (time consuming
+# rsync...)
+if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then 
+    rsync -a --exclude-from="$exclude" \
+             "$source" \
+             "${basedest}/day-backup-$(date "+%d-%m-%Y")"
+    exit 0
+fi
+
 
 #------------------------------------------------------------------------------
 
@@ -72,7 +100,7 @@ rmdir_cmd=/bin/rmdir                    # linux
 for prog in $rsync_cmd $find_cmd $stat_cmd $date_cmd $sort_cmd $egrep_cmd \
             $tail_cmd $mv_cmd $rm_cmd $rmdir_cmd; do
     if [[ ! (-x $prog) ]]; then
-        echo "$prog does not exist or is notexecutable, exiting..."
+        echo "$prog does not exist or is not executable, exiting..."
         exit 1
     fi
 done
@@ -120,7 +148,7 @@ if [[ ! "$prev" =~ $day ]]                       # first run on new day
 then                                             # full backup
    echo "doing full backup $current"
    $rsync_cmd -a                          \
-              --max-size=$max_file_size   \
+              --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --link-dest="$prev"         \
               "$source"                   \
@@ -128,7 +156,7 @@ then                                             # full backup
 else                                             # incremental backup
    echo "doing level one incremental backup $current"
    $rsync_cmd -a                          \
-              --max-size=$max_file_size   \
+              --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --compare-dest="$prev"      \
               "$source"                   \
