@@ -1,9 +1,9 @@
 # gossin-backup
 
-This script makes a full backup in $basedest the first time it is executed on 
+This script makes a full backup in `basedest` the first time it is executed on 
 a new day. Subsequent backups on the same day are level one incremental 
 backups. It keeps all backups from the current day, the first backup made 
-from each of the last $days, $months and $years.
+from each of the last `days`, `months` and `years`.
 
 The key feature of this script is that all full backups are made using 
 hardlinks to unchanged files (file-level deduplication), thereby being 
@@ -23,7 +23,7 @@ Requires the packages `crudini` and `rsync`
 2. Specify the location of the `rsyncexcludes` file in `gossin-backup.conf`
 (default `/opt/gossin-backup/`)
 3. Specify the location of `source` (where to copy from, e.g. `/home/`) and
-`basedest` in `gossin-backup.conf
+`basedest` in `gossin-backup.conf`
 4. Create the directory for `basedest` (where to copy to, e.g. `/backups`), and
 make yourself the owner of it (`sudo chown USER:GROUP DIR`) if you will not be
 running this as `root` (Note: `basedest` has to be either an empty directory,
