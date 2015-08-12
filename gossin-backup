@@ -29,7 +29,7 @@ if [[ ! (-x $crudini_cmd) ]]; then
     exit 1
 fi
 
-conf_file="gossin-backup.conf"
+conf_file="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/gossin-backup.conf"
 
 # make sure source has trailing slash (NOTE: fails if multiple slashes):
 tmpsource=$($crudini_cmd     --get "$conf_file" Linux source)
