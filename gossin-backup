@@ -96,8 +96,8 @@ rm_cmd=/bin/rm                          # linux
 #rm_cmd=/usr/bin/rm                     # windows
 rmdir_cmd=/bin/rmdir                    # linux
 #rmdir_cmd=/usr/bin/rmdir               # windows
-mkdir_cmd=/bin/mkdir                    # linux
-#mkdir_cmd=/usr/bin/mkdir               # windows
+touch_cmd=/usr/bin/touch                # linux
+#touch_cmd=/usr/bin/touch               # windows
 #------------------------------------------------------------------------------
 
 
@@ -109,7 +109,7 @@ mkdir_cmd=/bin/mkdir                    # linux
 # TODO for config options
 #
 for prog in $rsync_cmd $find_cmd $stat_cmd $date_cmd $sort_cmd $egrep_cmd \
-            $tail_cmd $mv_cmd $rm_cmd $rmdir_cmd; do
+            $tail_cmd $mv_cmd $rm_cmd $rmdir_cmd $touch_cmd; do
     if [[ ! (-x $prog) ]]; then
         echo "$prog does not exist or is not executable, exiting..."
         exit 1
@@ -146,8 +146,6 @@ prev_year=$(($($date_cmd "+%Y")-1))
 # name of this backup 
 #
 current="$basedest/backup-$date"
-# create this directory now so it gets a fresh timestamp
-$mkdir_cmd "$current"
 
 # make a backup based on hard links to most recent backup
 # -a archive mode = -rlptgoD: recursive copy, preserve everything
@@ -190,6 +188,9 @@ else                                             # incremental backup
    # unfortunately rsync creates empty dirs which we have to remove manually:
    $find_cmd "$current" -depth -type d -empty -exec rmdir {} \;
 fi
+
+# set timestamp on newly created backup dir
+$touch_cmd "$current"
 
 #
 # The following if statement first checks if this is first day of new year,
