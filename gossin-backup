@@ -191,9 +191,11 @@ else                                             # incremental backup
    $find_cmd "$current" -depth -type d -empty -exec rmdir {} \;
 fi
 
-# set timestamp on newly created backup dir
-$touch_cmd "$current"
-
+# set timestamp on newly created backup dir if it exists
+if [[ -d "$current" ]]; then
+    $touch_cmd "$current"
+fi
+    
 #
 # The following if statement first checks if this is first day of new year,
 # if so move newly performed full backup to an annual backup, if not repeat
