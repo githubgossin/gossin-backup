@@ -42,6 +42,7 @@ days=$($crudini_cmd          --get "$conf_file" Linux days)
 months=$($crudini_cmd        --get "$conf_file" Linux months)
 years=$($crudini_cmd         --get "$conf_file" Linux years)
 max_file_size=$($crudini_cmd --get "$conf_file" Linux max_file_size)
+log_level=$($crudini_cmd     --get "$conf_file" Linux log_level)
 
 # test for missing rsyncexludes file
 if [[ ! (-f $exclude) ]]; then
@@ -57,7 +58,7 @@ fi
 
 # test if this is run in empty $basedest, if so, initiate (time consuming
 # rsync...)
-if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then 
+if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then
     rsync -a --exclude-from="$exclude" \
              "$source" \
              "${basedest}/day-backup-$(date "+%d-%m-%Y")"
@@ -113,9 +114,12 @@ done
 # this to easily sort dirs according to date, then strip away the
 # epoch number with egrep, hmmm should be a more elegant way maybe...
 #
-prev=$($stat_cmd -c "%Y%n" $basedest/{d,m,y}*backup-* | $sort_cmd \
+prev=$($stat_cmd -c "%Y%n" "$basedest"/{d,m,y}*backup-* | $sort_cmd \
        | $egrep_cmd -o '/.*$' | $tail_cmd -n 1)
-
+if [[ "$log_level" -eq 1 ]]; then
+    echo "most recent backup is $prev"
+fi
+    
 # set some date variables
 #
 date=$($date_cmd "+%d-%m-%Y--%H%M%S")
