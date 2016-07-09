@@ -2,7 +2,7 @@
 
 ###############################################################################
 #
-# gossin-backup by Erik Hjelmås, erikh@hig.no, April 6. 2012
+# gossin-backup by Erik Hjelmås, erik.hjelmas@ntnu.no
 #
 # This script makes a full backup in $basedest the first time it is executed on 
 # a new day. Subsequent backups on the same day are level one incremental 
@@ -44,36 +44,6 @@ years=$($crudini_cmd         --get "$conf_file" Linux years)
 max_file_size=$($crudini_cmd --get "$conf_file" Linux max_file_size)
 log_level=$($crudini_cmd     --get "$conf_file" Linux log_level)
 
-# test for missing rsyncexludes file
-if [[ ! (-f $exclude) ]]; then
-    echo "$exclude does not exist or is not a file, exiting..."
-    exit 1
-fi
-
-# test for missing basedest
-if [[ ! (-d $basedest) ]]; then
-    echo "$basedest does not exist or is not a directory, exiting..."
-    exit 1
-fi
-
-# test if this is run in empty $basedest, if so, initiate (time consuming
-# rsync...)
-if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then
-    echo "doing initial backup, this takes time..."
-    rsync -a --exclude-from="$exclude" \
-             "$source" \
-             "${basedest}/day-backup-$(date "+%d-%m-%Y")"
-    exit 0
-# else if basedest not empty but do not contain previous backups, exit w warning
-else
-    expected_dirs_in_basedest=$(ls -d "$basedest"/{d,m,y}*backup-* 2>/dev/null)
-    if [[ -z "$expected_dirs_in_basedest" ]]; then
-	echo "$basedest not empty but do not contain previous backups! exiting"
-	exit 0
-    fi
-fi
-
-
 #------------------------------------------------------------------------------
 
 
@@ -106,7 +76,7 @@ touch_cmd=/usr/bin/touch                # linux
 
 # check config options, and presence of programs
 #
-# TODO for config options
+# TODO for some config options
 #
 for prog in $rsync_cmd $find_cmd $stat_cmd $date_cmd $sort_cmd $egrep_cmd \
             $tail_cmd $mv_cmd $rm_cmd $rmdir_cmd $touch_cmd; do
@@ -115,6 +85,38 @@ for prog in $rsync_cmd $find_cmd $stat_cmd $date_cmd $sort_cmd $egrep_cmd \
         exit 1
     fi
 done
+
+# test for missing rsyncexludes file
+if [[ ! (-f $exclude) ]]; then
+    echo "$exclude does not exist or is not a file, exiting..."
+    exit 1
+fi
+
+# test for missing basedest
+if [[ ! (-d $basedest) ]]; then
+    echo "$basedest does not exist or is not a directory, exiting..."
+    exit 1
+fi
+
+# test if this is run in empty $basedest, if so, initiate (time consuming
+# rsync...)
+if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then
+    echo "doing initial backup, this takes time..."
+    current="${basedest}/day-backup-$(date "+%d-%m-%Y")"
+    $rsync_cmd -a --exclude-from="$exclude" \
+             "$source" \
+             "$current"
+    # update timestamp
+    $touch_cmd "$current"
+    exit 0
+# else if basedest not empty but do not contain previous backups, exit w warning
+else
+    expected_dirs_in_basedest=$(ls -d "$basedest"/{d,m,y}*backup-* 2>/dev/null)
+    if [[ -z "$expected_dirs_in_basedest" ]]; then
+	echo "$basedest not empty but do not contain previous backups! exiting"
+	exit 0
+    fi
+fi
 
 # find most recent backup (parsing ls is dangerous due to word 
 # splitting, and globbing is difficult for sorting by mtime so 
