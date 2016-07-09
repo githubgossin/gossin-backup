@@ -59,10 +59,18 @@ fi
 # test if this is run in empty $basedest, if so, initiate (time consuming
 # rsync...)
 if [[ $(find "$basedest" -maxdepth 0 -empty -exec echo {} is empty. \;) ]]; then
+    echo "doing initial backup, this takes time..."
     rsync -a --exclude-from="$exclude" \
              "$source" \
              "${basedest}/day-backup-$(date "+%d-%m-%Y")"
     exit 0
+# else if basedest not empty but do not contain previous backups, exit w warning
+else
+    expected_dirs_in_basedest=$(ls -d "$basedest"/{d,m,y}*backup-* 2>/dev/null)
+    if [[ -z "$expected_dirs_in_basedest" ]]; then
+	echo "$basedest not empty but do not contain previous backups! exiting"
+	exit 0
+    fi
 fi
 
 
@@ -139,6 +147,8 @@ current="$basedest/backup-$date"
 
 # make a backup based on hard links to most recent backup
 # -a archive mode = -rlptgoD: recursive copy, preserve everything
+# --no-o, --no-g              do not preserve owner, to protect against
+#                             ransomware encrypting files as user
 # --max-size=$max_file_size   don't transfer any file > $max_file_size
 # --exclude-from=$exclude     read exclude patterns from $exclude
 # --link-dest=$prev           hardlink to files in $prev when unchanged
@@ -151,7 +161,11 @@ current="$basedest/backup-$date"
 if [[ ! "$prev" =~ $day ]]                       # first run on new day
 then                                             # full backup
    echo "doing full backup $current"
-   $rsync_cmd -a                          \
+   if [[ "$log_level" -eq 1 ]]; then
+       echo "$rsync_cmd -a --no-o, --no-g --max-size=$max_file_size 
+        --exclude-from=$exclude --link-dest=$prev $source $current"
+   fi
+   $rsync_cmd -a --no-o, --no-g           \
               --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --link-dest="$prev"         \
@@ -159,7 +173,11 @@ then                                             # full backup
               "$current"
 else                                             # incremental backup
    echo "doing level one incremental backup $current"
-   $rsync_cmd -a                          \
+   if [[ "$log_level" -eq 1 ]]; then
+       echo "$rsync_cmd -a --no-o, --no-g --max-size=$max_file_size 
+        --exclude-from=$exclude --compare-dest=$prev $source $current"
+   fi
+   $rsync_cmd -a --no-o, --no-g           \
               --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --compare-dest="$prev"      \
@@ -180,6 +198,9 @@ fi
 if [[ (! "$prev" =~ $this_year$) && \
       (! -d "$basedest/year-backup-$prev_month-$prev_year") ]] 
 then                                       # first run on new year
+   if [[ "$log_level" -eq 1 ]]; then
+       echo "$mv_cmd $current $basedest/year-backup-$prev_month-$prev_year"
+   fi
    $mv_cmd "$current" "$basedest/year-backup-$prev_month-$prev_year"
                                            # old yearly backups to be deleted:
    old_yearly=($($stat_cmd -c "%Y%n" "$basedest/year-backup-"* | $sort_cmd \
@@ -194,6 +215,9 @@ then                                       # first run on new year
 elif [[ (! "$prev" =~ $this_month-$this_year$) && \
         (! -d "$basedest/month-backup-$prev_month-$this_year") ]]
 then                                       # first run on new month
+   if [[ "$log_level" -eq 1 ]]; then
+       echo "$mv_cmd $current $basedest/month-backup-$prev_month-$this_year"
+   fi
    $mv_cmd "$current" "$basedest/month-backup-$prev_month-$this_year"
                                            # old monthly backups to be deleted:
    old_monthly=($($stat_cmd -c "%Y%n" "$basedest/month-backup-"* | $sort_cmd \
@@ -207,6 +231,9 @@ then                                       # first run on new month
    done
 elif [[ ! "$prev" =~ $day ]]               # first run on new day
 then 
+   if [[ "$log_level" -eq 1 ]]; then
+       echo "$mv_cmd $current $basedest/day-backup-$day"
+   fi
    $mv_cmd "$current" "$basedest/day-backup-$day"
       $rm_cmd -rf "$basedest/backup-"*     # delete inc. backups from yesterday
                                            # old daily backups to be deleted:
