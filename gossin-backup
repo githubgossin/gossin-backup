@@ -96,6 +96,8 @@ rm_cmd=/bin/rm                          # linux
 #rm_cmd=/usr/bin/rm                     # windows
 rmdir_cmd=/bin/rmdir                    # linux
 #rmdir_cmd=/usr/bin/rmdir               # windows
+mkdir_cmd=/bin/mkdir                    # linux
+#mkdir_cmd=/usr/bin/mkdir               # windows
 #------------------------------------------------------------------------------
 
 
@@ -144,6 +146,8 @@ prev_year=$(($($date_cmd "+%Y")-1))
 # name of this backup 
 #
 current="$basedest/backup-$date"
+# create this directory now so it gets a fresh timestamp
+$mkdir_cmd "$current"
 
 # make a backup based on hard links to most recent backup
 # -a archive mode = -rlptgoD: recursive copy, preserve everything
@@ -162,10 +166,10 @@ if [[ ! "$prev" =~ $day ]]                       # first run on new day
 then                                             # full backup
    echo "doing full backup $current"
    if [[ "$log_level" -eq 1 ]]; then
-       echo "$rsync_cmd -a --no-o, --no-g --max-size=$max_file_size 
+       echo "$rsync_cmd -a --no-o --no-g --max-size=$max_file_size 
         --exclude-from=$exclude --link-dest=$prev $source $current"
    fi
-   $rsync_cmd -a --no-o, --no-g           \
+   $rsync_cmd -a --no-o --no-g           \
               --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --link-dest="$prev"         \
@@ -174,10 +178,10 @@ then                                             # full backup
 else                                             # incremental backup
    echo "doing level one incremental backup $current"
    if [[ "$log_level" -eq 1 ]]; then
-       echo "$rsync_cmd -a --no-o, --no-g --max-size=$max_file_size 
+       echo "$rsync_cmd -a --no-o --no-g --max-size=$max_file_size 
         --exclude-from=$exclude --compare-dest=$prev $source $current"
    fi
-   $rsync_cmd -a --no-o, --no-g           \
+   $rsync_cmd -a --no-o --no-g           \
               --max-size="$max_file_size" \
               --exclude-from="$exclude"   \
               --compare-dest="$prev"      \
@@ -207,9 +211,12 @@ then                                       # first run on new year
                  | $egrep_cmd -o '/.*$'))
    while [[ $years -lt ${#old_yearly[@]} ]]
    do
-      $rm_cmd -rf "${old_yearly[0]}"
-      # re-read array, expensive but protects a bit against race conditions
-      old_yearly=($($stat_cmd -c "%Y%n" "$basedest/year-backup-"* | $sort_cmd \
+       if [[ "$log_level" -eq 1 ]]; then
+	   echo "$rm_cmd -rf ${old_yearly[0]}"
+       fi
+       $rm_cmd -rf "${old_yearly[0]}"
+       # re-read array, expensive but protects a bit against race conditions
+       old_yearly=($($stat_cmd -c "%Y%n" "$basedest/year-backup-"* | $sort_cmd \
                     | $egrep_cmd -o '/.*$'))
    done
 elif [[ (! "$prev" =~ $this_month-$this_year$) && \
@@ -224,9 +231,12 @@ then                                       # first run on new month
                   | $egrep_cmd -o '/.*$'))
    while [[ $months -lt ${#old_monthly[@]} ]]
    do
-      $rm_cmd -rf "${old_monthly[0]}"
-      # re-read array, expensive but protects a bit against race conditions
-      old_monthly=($($stat_cmd -c "%Y%n" "$basedest/month-backup-"* | $sort_cmd \
+       if [[ "$log_level" -eq 1 ]]; then
+	   echo "$rm_cmd -rf ${old_monthly[0]}"
+       fi
+       $rm_cmd -rf "${old_monthly[0]}"
+       # re-read array, expensive but protects a bit against race conditions
+       old_monthly=($($stat_cmd -c "%Y%n" "$basedest/month-backup-"* | $sort_cmd \
                      | $egrep_cmd -o '/.*$'))
    done
 elif [[ ! "$prev" =~ $day ]]               # first run on new day
@@ -241,9 +251,12 @@ then
                 | $egrep_cmd -o '/.*$'))   
    while [[ $days -lt ${#old_daily[@]} ]]
    do
-      $rm_cmd -rf "${old_daily[0]}"
-      # re-read array, expensive but protects a bit against race conditions
-      old_daily=($($stat_cmd -c "%Y%n" "$basedest/day-backup-"* | $sort_cmd \
+       if [[ "$log_level" -eq 1 ]]; then
+	   echo "$rm_cmd -rf ${old_daily[0]}"
+       fi
+       $rm_cmd -rf "${old_daily[0]}"
+       # re-read array, expensive but protects a bit against race conditions
+       old_daily=($($stat_cmd -c "%Y%n" "$basedest/day-backup-"* | $sort_cmd \
                    | $egrep_cmd -o '/.*$'))   
    done
 fi
