@@ -16,6 +16,10 @@
 # Credits to Mike Rubel, http://www.mikerubel.org/computers/rsync_snapshots/
 # (and everyone who have published similar articles based on Mike Rubels work)
 #
+# ISSUES
+# - should change to numeric sorting of only epochs or switch to find command?
+#
+#
 ###############################################################################
 
 
