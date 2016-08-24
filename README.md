@@ -36,10 +36,10 @@ this script)
  
 ## Limitations
 
-+ This script has only been tested on Ubuntu (12.04 and 14.04).
++ This script has only been tested on Ubuntu (12.04, 14.04 and 16.04).
 + (issue) Every run generates "No such file or directory" for month and year
 backups before they exist for the first time (I know, I really should fix this) 
 
 ## Author
 
-gossin-backup was written by Erik Hjelmås, <erikh@hig.no>
+gossin-backup was written by Erik Hjelmås, <erik.hjelmas@ntnu.no>
